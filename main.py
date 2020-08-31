@@ -13,119 +13,57 @@ from sklearn.externals import joblib
 import time
 import pickle as pkl
 
+np.random.seed(0)
+
 # Part 1: select data
 
-speaker_N = 2
+NUM_SELECTED = 2
 
-raw_data_path = 'data/2-speaker-encoded'
-raw_list_path = 'data/2-speaker-firsr-samples-text_list_for_synthesis.txt'
+speaker_N = 1
+language_N = 1
 
-def str2list(s):
-    #[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    r = []
-    i = 1
-    while i < len(s):
-        r.append(str(s[i]))
-        i += 3
-    return r
+raw_data_path = '/home/hujk17/PPG2MEL_DATA/LJSpeech-1.1_Norm_Sort/norm_ppg'
+raw_list_path = '/home/hujk17/PPG2MEL_DATA/LJSpeech-1.1_Norm_Sort/sorted_train.txt'
 
-class Encoding:
-    def __init__(self, p, language_id, vec, t_sne_vec=None):
-        self.p = p
+class Point:
+    def __init__(self, t_sne_vec, speaker_id, language_id, vec, path, idx):
+        self.t_sne_vec = t_sne_vec
+        self.speaker_id = speaker_id
         self.language_id = language_id
         self.vec = vec
-        self.t_sne_vec = t_sne_vec
+        self.path = path
+        self.idx = idx
+        
 
-
-raw_data = []
 data = []
 
 f = open(raw_list_path, 'r', encoding='utf8').readlines()
-f = [i.strip('\t\r\n') for i in f]
+f = [i.strip() for i in f]
+np.random.shuffle(f)
+f = f[:NUM_SELECTED]
 
 for i, s in enumerate(f):
-    if i % speaker_N != 0:
-        continue
+    path = os.path.join(raw_data_path, s + '.npy')
+    ppg = np.load(path)
+    
+    t_sne_vec = None
+    speaker_id = 0
+    language_id = 0
+    path = path
+    for i in range(ppg.shape[0]):
+        vec = ppg[i]
+        idx = i
+        p = Point(t_sne_vec, speaker_id, language_id, vec, path, idx)
+        data.append(p)
 
-    path = os.path.join(raw_data_path, 'encoded-batch_'+str(i)+'_sentence_0.npy')
-    feature_seq = np.load(path)
-    
-    a = s.split('|')
-    text = a[0] + '~'
-    language_seq = str2list(a[1])
-    
-    assert len(text) == len(language_seq) and len(text) == feature_seq.shape[0]
-    
-    for i in range(len(text)):
-        encoding = Encoding(text[i], language_seq[i], feature_seq[i])
-        # not use raw_data, directly all is selected data
-        data.append(encoding)
+print('tot ppg:', len(data))
 
 
 # Part 2: use t-SNE to reduct dimension
 
 limit_sentences = random.randint(1, 1000000)
-log_dir = '2-speaker-Encoded_Easy_t-SNE_RandomTrain_'+str(limit_sentences)+'_log_for2020-4-30-ppt'
+log_dir = 'T-SNE_'+str(limit_sentences)+'_log_for_2020-8-31'
 os.makedirs(log_dir, exist_ok=True)
-
-_pad        = '_'
-_eos        = '~'
-_characters = 'abcdefghijklmnopqrstuvwxyz123456!\',.;? []()'
-# Export all symbols:
-symbols = [_pad, _eos] + list(_characters)
-syl_to_no = {}
-for i, x in enumerate(symbols):
-    syl_to_no[x] = i
-print(len(symbols), symbols)
-
-color_num = len(symbols) * 2
-colors = cm.rainbow(np.linspace(0, 1, color_num))
-
-
-def get_color(p, language_id):
-    no = syl_to_no[p]
-    if language_id == '0':
-        no += len(symbols)
-    c = colors[no]
-    return c
-
-
-def get_symbol(p, language_id):
-    if language_id == '0':
-        # change symbol to English version
-        # A-Z, ' ' -> '*', '~' -> '=', 'biaodian'
-        p = p.upper()
-        if p == ' ':
-            p = '*'
-        if p == '~':
-            p = '-'
-    else:
-        # a-z, '1-5', ' ', '~'
-        if p == ' ':
-            p = '^'
-    return p
-
-
-def plot_embedding_2d(encodings, title=None, save_path=None):
-    X = [x.t_sne_vec for x in encodings]
-    X = np.asarray(X)
-    x_min, x_max = np.min(X, axis=0), np.max(X, axis=0)
-    X = (X - x_min) / (x_max - x_min)
-
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-    for i in range(X.shape[0]):
-        ch = get_symbol(encodings[i].p, encodings[i].language_id)
-        c = get_color(encodings[i].p, encodings[i].language_id)
-        ax.text(X[i, 0], X[i, 1], ch, color=c,
-                fontdict={'weight': 'bold', 'size': 9})
-
-    if title is not None:
-        plt.title(title)
-    if save_path is not None:
-        plt.savefig(save_path, format='png', dpi=300)
-    plt.close()
-
 
 X_tsne_path = os.path.join(log_dir, 'X_tsne.npy')
 if os.path.exists(X_tsne_path):
@@ -143,12 +81,29 @@ else:
     np.save(X_tsne_path, X_tsne)
 
 for i, a in enumerate(X_tsne):
-        data[i].t_sne_vec = X_tsne[i]
+    data[i].t_sne_vec = X_tsne[i]
 
 
 # Part 3: draw png
 
-tsne_embedding_path = os.path.join(log_dir, 'full-tsne-encoded.png')
+def plot_embedding_2d(points, title=None, save_path=None):
+    X = [x.t_sne_vec for x in points]
+    X = np.asarray(X)
+    x_min, x_max = np.min(X, axis=0), np.max(X, axis=0)
+    X = (X - x_min) / (x_max - x_min)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    for i in range(X.shape[0]):
+        ax.scatter(X[i, 0], X[i, 1], color='r')
+
+    if title is not None:
+        plt.title(title)
+    if save_path is not None:
+        plt.savefig(save_path, format='png', dpi=300)
+    plt.close()
+
+tsne_embedding_path = os.path.join(log_dir, 'ppg-tsne.png')
 plot_embedding_2d(data, "t-SNE 2D", tsne_embedding_path)
 
 
