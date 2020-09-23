@@ -35,7 +35,7 @@ class Point:
         self.idx = idx
 
 
-def randome_select(raw_list_path, raw_data_path, speaker, language, NUM_SELECTED, data):
+def randome_select(raw_list_path, NUM_SELECTED, data):
     f = open(raw_list_path, 'r', encoding='utf8').readlines()
     f = [i.strip() for i in f]
     np.random.shuffle(f)
@@ -47,8 +47,8 @@ def randome_select(raw_list_path, raw_data_path, speaker, language, NUM_SELECTED
         ppg = np.load(path)
         
         t_sne_vec = None
-        speaker_id = speaker
-        language_id = language
+        speaker_id = 0
+        language_id = 0
         path = path
         for i in range(ppg.shape[0]):
             vec = ppg[i]
@@ -107,7 +107,7 @@ def plot_embedding_2d(points, title=None, save_path=None):
 
 def select_calcu_draw():
     data = []
-    data = randome_select(raw_list_path, raw_data_path, 0, 0, NUM_SELECTED, data)
+    data = randome_select(raw_list_path, NUM_SELECTED, data)
     data = calcu_tsne(data)
     plot_embedding_2d(data, "t-SNE 2D", os.path.join(log_dir, 'ppg-tsne.png'))
         
